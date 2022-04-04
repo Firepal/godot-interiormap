@@ -1,0 +1,68 @@
+[gd_resource type="Shader" format=2]
+
+[resource]
+code = "shader_type spatial;
+//render_mode unshaded;
+
+varying vec3 eye_dir;
+void vertex() {
+	vec3 world_cam = CAMERA_MATRIX[3].xyz;
+	vec3 world_vertex = (WORLD_MATRIX * vec4(VERTEX,1.0)).xyz;
+	
+	BINORMAL = cross(TANGENT,NORMAL);
+	mat3 world_TBN = mat3(WORLD_MATRIX) * mat3(
+		TANGENT,
+		BINORMAL,
+		NORMAL
+	);
+	
+	eye_dir = (world_vertex - world_cam) * world_TBN;
+}
+
+vec2 hash22(vec2 p)
+{
+	vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx+33.33);
+    return fract((p3.xx+p3.yz)*p3.zy);
+
+}
+
+uniform vec2 atlas_count = vec2(1.0);
+uniform vec2 room_scale = vec2(1.0);
+uniform float tex_align = 1.0;
+uniform float depth = 1.0;
+uniform sampler2D atlas_tex;
+void fragment() {
+	float max_sc = min(room_scale.x,room_scale.y);
+	
+	vec3 sc = vec3(room_scale,max_sc/max(depth,1e-4));
+	
+	vec3 ro = fract(vec3(UV,0.0) * sc);
+	vec3 rd = normalize(eye_dir) * sc;
+	
+	vec3 bMin = floor(ro) + vec3(0.0,0.0,-1.0);
+	vec3 bMax = bMin + 1.0;
+	vec3 bMid = bMin + 0.5;
+	
+	vec3 planes = mix(bMin,bMax,step(0.0,rd));
+	vec3 p = (planes - ro) / rd;
+	
+	float dist = min(min(p.x,p.y),p.z);
+	
+	vec3 pos = (ro + rd * dist) - bMid;
+	vec2 roomUV = pos.xy * mix(tex_align,1.0,pos.z + 0.5) + 0.5;
+	
+	roomUV /= atlas_count;
+	vec2 roomidx = hash22(floor(UV * sc.xy));
+	roomUV += floor(roomidx * atlas_count) / atlas_count;
+	
+	vec3 texcolor = texture(atlas_tex,roomUV).rgb;
+	vec2 ys = abs(fract(UV*sc.xy*vec2(4.0,1.0))-0.5)*vec2(1.0,1.0);
+	ys = smoothstep(0.48,0.47,ys);
+	vec3 extcolor = vec3(ys.x*ys.y);
+	float fac = 1.0-ys.x*ys.y;
+	
+	EMISSION = texcolor;
+	ALBEDO = vec3( 0.0 );
+	ROUGHNESS = 0.1;
+}"
